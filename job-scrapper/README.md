@@ -1,6 +1,6 @@
 # Job Scraper & Matcher Workflow
 
-An automated n8n workflow that parses candidate CV data using Google Gemini, searches for active job postings across top ATS platforms via Tavily, and delivers matched positions directly to Telegram.
+An automated n8n workflow that parses candidate CV data using Google Gemini, searches for active job postings concurrently across top tech job boards and ATS platforms via **Tavily** and **Firecrawl**, merges the results, and delivers matched positions directly to Telegram.
 
 ---
 
@@ -14,35 +14,47 @@ Create accounts and obtain credentials for the following services:
 2. **Tavily Search API**
    - Create key: https://tavily.com/
 
-3. **Telegram Bot & Chat ID**
+3. **Firecrawl API**
+   - Create key: https://firecrawl.dev/
+
+4. **Telegram Bot & Chat ID**
    - Create bot: https://t.me/BotFather
+   - Note down your bot token and target Chat ID.
 
 ---
 
 ## ⚡ How It Works
 
 ```
-[Schedule Trigger (09:00 AM) / Manual Execution]
-                        │
-                        ▼
-            [CV Profile (JSON Node)]
-                        │
-                        ▼
-      [Google Gemini Agent (LLM Extractor)]
-    Extracts seniority, stack & search query
-                        │
-                        ▼
-      [Tavily Deep Search API Engine]
-    Searches Lever, Greenhouse, Ashby, etc.
-                        │
-                        ▼
-         [JavaScript Formatting Node]
-                        │
-                        ▼
-           [Telegram Bot Notification]
+                     [Schedule Trigger (09:00 AM) / Manual Execution / Chat Trigger]
+                                                    │
+                                                    ▼
+                                        [CV Profile (JSON Node)]
+                                                    │
+                                                    ▼
+                                  [Google Gemini Agent (LLM Extractor)]
+                                Extracts seniority, role & top 2 stack techs
+                                                    │
+                         ┌──────────────────────────┴──────────────────────────┐
+                         ▼                                                     ▼
+         [Tavily Deep Search API Engine]                       [Firecrawl Search API Engine]
+       (Lever, Greenhouse, Ashby, BuiltIn...)             (WeWorkRemotely, Arc.dev, JustRemote...)
+                         │                                                     │
+                         └──────────────────────────┬──────────────────────────┘
+                                                    ▼
+                                              [Merge Node]
+                                                    │
+                                                    ▼
+                                       [JavaScript Formatting Node]
+                                                    │
+                                                    ▼
+                                        [Telegram Bot Notification]
 ```
 
-1. **CV Processing:** Reads the structured CV profile in the `CV in JSON` node (or processes PDF uploads via the chat trigger flow).
-2. **Query Generation:** Google Gemini analyzes the experience and stack to produce an optimized search string (e.g., `"senior fullstack engineer React Node.js TypeScript remote contract LATAM"`).
-3. **Job Search:** Tavily executes a targeted search across specified job domains (`lever.co`, `greenhouse.io`, `ashbyhq.com`, `linkedin.com`, etc.) for postings published in the last 24 hours.
-4. **Delivery:** The workflow formats the matching opportunities and sends a Telegram message with direct application links.
+1. **CV Processing & Parsing:** Reads structured CV data from the `CV in JSON` node or extracts text from PDF uploads via the Chat Trigger (`Extract from File` + Gemini CV JSON generator).
+2. **Query Generation:** Google Gemini analyzes experience and skills to construct an optimized query string following the template `"{seniority} {role} engineer {stack}"` (e.g., `"senior full stack engineer React Node.js"` with seniority mapped to `junior`, `ssr`, `senior`, or `staff`).
+3. **Dual Parallel Job Search:**
+   - **Tavily Search API:** Executes targeted web searches across ATS platforms (`lever.co`, `greenhouse.io`, `ashbyhq.com`, `builtin.com`, `workable.com`, `wellfound.com`, `linkedin.com`, etc.).
+   - **Firecrawl API (`v2/search`):** Concurrently queries remote tech job boards (`weworkremotely.com`, `justremote.co`, `arc.dev`, `gun.io`, `unjobs.org`, etc.).
+4. **Result Merging & Formatting:** The `Merge` node combines outputs from both search engines. The `Create Final Message` JavaScript node parses results from both Tavily (`results`) and Firecrawl (`data.web`) into a unified Markdown notification message.
+5. **Delivery:** The `Send found jobs` node sends the formatted list directly to your specified Telegram Chat ID.

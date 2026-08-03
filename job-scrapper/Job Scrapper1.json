@@ -1,0 +1,465 @@
+{
+  "name": "Job Scrapper",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        384
+      ],
+      "id": "f652964e-636f-43d9-91d7-52b6c952d9b9",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        336,
+        432
+      ],
+      "id": "17f50bfb-2285-4760-be08-f4a7c38ae2b5",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "ade8AXq1JF6Gaj0m",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.tavily.com/search",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n\"query\": {{JSON.stringify($json.output)}},\n\"time_range\": \"day\",\n\"search_depth\": \"basic\",\n\"max_results\" : 10,\n\"include_domains\": [\n    \"lever.co\",\n    \"greenhouse.io\",\n    \"ashbyhq.com\",\n    \"jobs.workable.com\",\n    \"wellfound.com\",\n    \"workatastartup.com\",\n    \"workana.com\",\n    \"getonbrd.com\",\n    \"revelo.com\",\n    \"linkedin.com\",\n    \"builtin.com\"\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        704,
+        336
+      ],
+      "id": "3839efc5-083a-4a60-8e61-a387d2048ac9",
+      "name": "Tavily Search",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "FUauaBJyHEF7NPN6",
+          "name": "Tavily API key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an expert AI Job Matcher specializing in generating high-precision search queries for the Tavily Search Engine.\n\nTask: Analyze the candidate's CV below to generate EXACTLY ONE search query following this structure: \"{seniority} {role} {stack}\"\n\nCandidate CV:\n{{ $json.cv ? JSON.stringify($json.cv) : $json.output }}\n\n\nRules for Parameter Extraction & Formatting:\n- seniority: Map from CV years of experience and role complexity to exactly one of [junior, ssr, senior, staff]. This is an experience tier, not a regional label.\n- role: Map to one of [full stack, backend, frontend].\n- stack: Extract exactly 2 core technologies present in the CV, prioritizing the ones mentioned most frequently. Do NOT invent technologies.\n\nRules for Output:\n- Combine the extracted values strictly into the template: \"{seniority} {role} engineer {stack}\".\n- Output ONLY the raw search query string. No preambles, no markdown code blocks, no explanations, no quotes around the output.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        336,
+        256
+      ],
+      "id": "153aec06-71fe-4484-b563-e6c69368d474",
+      "name": "Create Search Query"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        160,
+        256
+      ],
+      "id": "169cf485-1571-4fd0-8457-d34c8ebb8d92",
+      "name": "CV in JSON"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Tomamos los resultados del nodo de Tavily\nconst items = $input.all();\n\n// Extrae resultados buscando la estructura de Tavily o Firecrawl\nlet tavilyResults = [];\nlet firecrawlResults = [];\n\nitems.forEach(item => {\n  if (item.json.results) {\n    tavilyResults = item.json.results;\n  }\n  if (item.json.data?.web) {\n    firecrawlResults = item.json.data.web;\n  }\n});\n\nconst allJobs = [...tavilyResults, ...firecrawlResults];\n\nconst results = allJobs\n\nif (results.length === 0) {\n  return [{ json: { summary_message: \"No se encontraron ofertas que coincidan hoy.\" } }];\n}\n\nlet message = \"🚀 **Nuevas ofertas de trabajo encontradas:** \\n\\n \";\n\nresults.forEach((job, index) => {\n  // Limpiamos el título por si trae espacios raros\n  const title = job.title ? job.title.trim() : \"Oferta de trabajo\";\n  const url = job.url;\n  \n  message += ` ${index + 1}. **${title}** \\n 🔗 ${url} \\n\\n `;\n});\n\nreturn [{\n  json: {\n    summary_message: message.trim()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        256
+      ],
+      "id": "201409d4-1b7e-4a9f-80e3-0db6165446b9",
+      "name": "Create Final Message"
+    },
+    {
+      "parameters": {
+        "chatId": "-5199344207",
+        "text": "={{ $json.summary_message }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1264,
+        256
+      ],
+      "id": "3a1f4b1b-d8a4-477d-b55b-f535c5321777",
+      "name": "Send found jobs",
+      "webhookId": "fc9c67bb-a112-44e3-b1e2-8b5ac29911a3",
+      "credentials": {
+        "telegramApi": {
+          "id": "BfC9NgLOnYJeXOuM",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -32,
+        144
+      ],
+      "id": "e075133d-14a9-462b-97cd-7e9559614ba1",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "options": {
+          "allowFileUploads": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        352,
+        -384
+      ],
+      "id": "66535e1e-5ec9-4ce8-aa51-d64ff732285f",
+      "name": "When chat message received",
+      "webhookId": "a8175ab9-dadb-4329-b89b-ff1aa8074206"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You have attached the CV of the user:\n\n## User CV\n{{ $json.text }}\n## end of user CV\n\nMision:\n1. Convert this text in a JSON format for an LLM to understand it flawlessly.\n2. Extract experience, seniority, tech stack, links, side projects and user title.\n\n\nThe output must be in this format:\n{\n  \"name\": \"\",\n  \"title\": \"\",\n  \"contact\": {\n    \"phone\": \"\",\n    \"email\": \"\",\n    \"linkedin\": \"\",\n    \"website\": \"\"\n  },\n  \"summary\": \"\",\n  \"experience\": [\n    {\n      \"company\": \"\",\n      \"role\": \"\",\n      \"start_date\": \"\",\n      \"end_date\": \"\",\n      \"responsibilities\": [],\n      \"technologies\": [],\n      \"client\": \"\"\n    }\n  ],\n  \"side_projects\": [\n    {\n      \"name\": \"\",\n      \"url\": \"\",\n      \"description\": \"\",\n      \"highlights\": [],\n      \"technologies\": []\n    }\n  ],\n  \"skills\": {\n    \"frontend\": [],\n    \"backend\": [],\n    \"databases\": [],\n    \"cloud_infra\": [],\n    \"other\": []\n  },\n  \"years_of_experience\": 0\n}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        752,
+        -384
+      ],
+      "id": "76ad32c5-2892-47d5-a345-d2b1278ab58d",
+      "name": "Create Search Query1"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "data0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        576,
+        -384
+      ],
+      "id": "808d0bb9-c1d3-47aa-903a-eb044ff8641f",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        752,
+        -192
+      ],
+      "id": "0c94d59e-8178-46d5-b04f-4a8b2a25b591",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "ade8AXq1JF6Gaj0m",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Create JSON of your CV\n\nIt's necessary to write a text on the message to upload the PDF ",
+        "height": 480,
+        "width": 768
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        256,
+        -528
+      ],
+      "id": "cdaf630c-b2ab-465a-8824-c35a5f4ea9c6",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Agent\n1. It creates a query for Tavily according your CV experience and stack\n2. It searches on Tavily open positions\n3. Sends you a Telegram message with 10 results where you can apply",
+        "height": 592,
+        "width": 1248,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        288,
+        0
+      ],
+      "id": "d1d97ee4-7d2a-46dc-92d1-9a32f6e7c160",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v2/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "=json",
+        "specifyBody": "json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n    \"query\": {{JSON.stringify($json.output)}},\n    \"limit\": 10,\n    \"tbs\": \"qdr:w\",\n    \"includeDomains\": [\n      \"weworkremotely.com\",\n      \"lever.co\",\n      \"greenhouse.io\",\n      \"ashbyhq.com\",\n      \"jobs.workable.com\",\n      \"wellfound.com\",\n      \"workatastartup.com\",\n      \"workana.com\",\n      \"getonbrd.com\",\n      \"builtin.com\",\n      \"justremote.co\",\n      \"weworkremotely.com\",\n      \"arc.dev\",\n      \"unjobs.org\",\n      \"gun.io\"\n    ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        704,
+        192
+      ],
+      "id": "bb02e5b3-cb75-4170-8f62-56c9585b2a2e",
+      "name": "Firecrawl request",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "XpRGuKtcUwOk7sJx",
+          "name": "Firecrawl API key"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        896,
+        256
+      ],
+      "id": "b84e32a8-1dc9-4e86-828c-d77236276b03",
+      "name": "Merge"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "CV in JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Create Search Query",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tavily Search": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Create Search Query": {
+      "main": [
+        [
+          {
+            "node": "Firecrawl request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Tavily Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV in JSON": {
+      "main": [
+        [
+          {
+            "node": "Create Search Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Final Message": {
+      "main": [
+        [
+          {
+            "node": "Send found jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "CV in JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Create Search Query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Create Search Query1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Search Query1": {
+      "main": [
+        [
+          {
+            "node": "Create Search Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Firecrawl request": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Create Final Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "timezone": "America/Argentina/Buenos_Aires",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "9882d82f-e07b-4181-be0f-c3ab5d08579d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4b6a6ec0188f004d18c751cbbf1895147632695b7d1d596ef7c180c854a4d10f"
+  },
+  "nodeGroups": [],
+  "id": "UreWV8v4kl9iRGFu",
+  "tags": []
+}
