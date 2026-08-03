@@ -6,8 +6,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -64,
-        320
+        -16,
+        384
       ],
       "id": "f652964e-636f-43d9-91d7-52b6c952d9b9",
       "name": "When clicking ‘Execute workflow’"
@@ -21,7 +21,7 @@
       "typeVersion": 1.1,
       "position": [
         336,
-        368
+        432
       ],
       "id": "17f50bfb-2285-4760-be08-f4a7c38ae2b5",
       "name": "Google Gemini Chat Model",
@@ -49,35 +49,35 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n\"query\": {{JSON.stringify($json.output)}},\n\"time_range\": \"day\",\n\"search_depth\": \"basic\",\n\"max_results\" : 10,\n\"include_domains\": [\n    \"lever.co\",\n    \"greenhouse.io\",\n    \"ashbyhq.com\",\n    \"jobs.workable.com\",\n    \"wellfound.com\",\n    \"workatastartup.com\",\n    \"workana.com\",\n    \"getonbrd.com\",\n    \"revelo.com\",\n    \"linkedin.com\"\n  ]\n}",
+        "jsonBody": "={\n\"query\": {{JSON.stringify($json.output)}},\n\"time_range\": \"day\",\n\"search_depth\": \"basic\",\n\"max_results\" : 10,\n\"include_domains\": [\n    \"lever.co\",\n    \"greenhouse.io\",\n    \"ashbyhq.com\",\n    \"jobs.workable.com\",\n    \"wellfound.com\",\n    \"workatastartup.com\",\n    \"workana.com\",\n    \"getonbrd.com\",\n    \"revelo.com\",\n    \"linkedin.com\",\n    \"builtin.com\"\n  ]\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        624,
-        192
+        704,
+        336
       ],
       "id": "3839efc5-083a-4a60-8e61-a387d2048ac9",
       "name": "Tavily Search",
       "credentials": {
         "httpBearerAuth": {
           "id": "FUauaBJyHEF7NPN6",
-          "name": "Bearer Auth account"
+          "name": "Tavily API key"
         }
       }
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "=You are an expert AI Job Matcher specializing in generating high-precision search queries for Tavily Search Engine.\n\nTask: Analyze the candidate's CV below to generate EXACTLY ONE search query following this structure: \"{seniority} {role} engineer {stack} remote {engagement} {region}\"\n\nCandidate CV:\n{{ $json.cv ? JSON.stringify($json.cv) : $json.output }}\n\n\nRules for Parameter Extraction & Formatting:\n- seniority: Map from CV experience to one of [semi-senior, mid-level, senior].\n- role: Map to one of [fullstack, backend, frontend].\n- stack: Extract exactly 3 core technologies present in the CV (e.g., React Node.js TypeScript). Do NOT invent technologies.\n- engagement: Map from candidate preference or default to [contract, freelance].\n- region: Map candidate preference or location to one of [LATAM, Argentina, Latin America].\n\nRules for Output:\n- Combine the extracted values strictly into the template: \"{seniority} {role} engineer {stack} remote {engagement} {region}\".\n- Output ONLY the raw search query string. No preambles, no markdown code blocks, no explanations, no quotes around the output.",
+        "text": "=You are an expert AI Job Matcher specializing in generating high-precision search queries for the Tavily Search Engine.\n\nTask: Analyze the candidate's CV below to generate EXACTLY ONE search query following this structure: \"{seniority} {role} {stack}\"\n\nCandidate CV:\n{{ $json.cv ? JSON.stringify($json.cv) : $json.output }}\n\n\nRules for Parameter Extraction & Formatting:\n- seniority: Map from CV years of experience and role complexity to exactly one of [junior, ssr, senior, staff]. This is an experience tier, not a regional label.\n- role: Map to one of [full stack, backend, frontend].\n- stack: Extract exactly 2 core technologies present in the CV, prioritizing the ones mentioned most frequently. Do NOT invent technologies.\n\nRules for Output:\n- Combine the extracted values strictly into the template: \"{seniority} {role} engineer {stack}\".\n- Output ONLY the raw search query string. No preambles, no markdown code blocks, no explanations, no quotes around the output.",
         "options": {}
       },
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 3.1,
       "position": [
         336,
-        192
+        256
       ],
       "id": "153aec06-71fe-4484-b563-e6c69368d474",
       "name": "Create Search Query"
@@ -91,27 +91,28 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        112,
-        192
+        160,
+        256
       ],
       "id": "169cf485-1571-4fd0-8457-d34c8ebb8d92",
       "name": "CV in JSON"
     },
     {
       "parameters": {
-        "jsCode": "// Tomamos los resultados del nodo de Tavily\nconst results = $input.first().json.results || [];\n\nif (results.length === 0) {\n  return [{ json: { summary_message: \"No se encontraron ofertas que coincidan hoy.\" } }];\n}\n\nlet message = \"🚀 **Nuevas ofertas de trabajo encontradas:** \\n\\n \";\n\nresults.forEach((job, index) => {\n  // Limpiamos el título por si trae espacios raros\n  const title = job.title ? job.title.trim() : \"Oferta de trabajo\";\n  const url = job.url;\n  \n  message += ` ${index + 1}. **${title}** \\n 🔗 ${url} \\n\\n `;\n});\n\nreturn [{\n  json: {\n    summary_message: message.trim()\n  }\n}];"
+        "jsCode": "// Tomamos los resultados del nodo de Tavily\nconst items = $input.all();\n\n// Extrae resultados buscando la estructura de Tavily o Firecrawl\nlet tavilyResults = [];\nlet firecrawlResults = [];\n\nitems.forEach(item => {\n  if (item.json.results) {\n    tavilyResults = item.json.results;\n  }\n  if (item.json.data?.web) {\n    firecrawlResults = item.json.data.web;\n  }\n});\n\nconst allJobs = [...tavilyResults, ...firecrawlResults];\n\nconst results = allJobs\n\nif (results.length === 0) {\n  return [{ json: { summary_message: \"No se encontraron ofertas que coincidan hoy.\" } }];\n}\n\nlet message = \"🚀 **Nuevas ofertas de trabajo encontradas:** \\n\\n \";\n\nresults.forEach((job, index) => {\n  // Limpiamos el título por si trae espacios raros\n  const title = job.title ? job.title.trim() : \"Oferta de trabajo\";\n  const url = job.url;\n  \n  message += ` ${index + 1}. **${title}** \\n 🔗 ${url} \\n\\n `;\n});\n\nreturn [{\n  json: {\n    summary_message: message.trim()\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        816,
-        192
+        1072,
+        256
       ],
       "id": "201409d4-1b7e-4a9f-80e3-0db6165446b9",
       "name": "Create Final Message"
     },
     {
       "parameters": {
+        "chatId": "-5199344207",
         "text": "={{ $json.summary_message }}",
         "additionalFields": {
           "parse_mode": "Markdown"
@@ -120,8 +121,8 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1008,
-        192
+        1264,
+        256
       ],
       "id": "3a1f4b1b-d8a4-477d-b55b-f535c5321777",
       "name": "Send found jobs",
@@ -146,8 +147,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.3,
       "position": [
-        -80,
-        80
+        -32,
+        144
       ],
       "id": "e075133d-14a9-462b-97cd-7e9559614ba1",
       "name": "Schedule Trigger"
@@ -236,8 +237,8 @@
     {
       "parameters": {
         "content": "## Agent\n1. It creates a query for Tavily according your CV experience and stack\n2. It searches on Tavily open positions\n3. Sends you a Telegram message with 10 results where you can apply",
-        "height": 528,
-        "width": 928,
+        "height": 592,
+        "width": 1248,
         "color": 3
       },
       "type": "n8n-nodes-base.stickyNote",
@@ -248,6 +249,49 @@
       ],
       "id": "d1d97ee4-7d2a-46dc-92d1-9a32f6e7c160",
       "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v2/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "=json",
+        "specifyBody": "json",
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "jsonBody": "={\n    \"query\": {{JSON.stringify($json.output)}},\n    \"limit\": 10,\n    \"tbs\": \"qdr:w\",\n    \"includeDomains\": [\n      \"weworkremotely.com\",\n      \"lever.co\",\n      \"greenhouse.io\",\n      \"ashbyhq.com\",\n      \"jobs.workable.com\",\n      \"wellfound.com\",\n      \"workatastartup.com\",\n      \"workana.com\",\n      \"getonbrd.com\",\n      \"builtin.com\",\n      \"justremote.co\",\n      \"weworkremotely.com\",\n      \"arc.dev\",\n      \"unjobs.org\",\n      \"gun.io\"\n    ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        704,
+        192
+      ],
+      "id": "bb02e5b3-cb75-4170-8f62-56c9585b2a2e",
+      "name": "Firecrawl request",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "XpRGuKtcUwOk7sJx",
+          "name": "Firecrawl API key"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        896,
+        256
+      ],
+      "id": "b84e32a8-1dc9-4e86-828c-d77236276b03",
+      "name": "Merge"
     }
   ],
   "pinData": {},
@@ -278,9 +322,9 @@
       "main": [
         [
           {
-            "node": "Create Final Message",
+            "node": "Merge",
             "type": "main",
-            "index": 0
+            "index": 1
           }
         ]
       ]
@@ -288,6 +332,11 @@
     "Create Search Query": {
       "main": [
         [
+          {
+            "node": "Firecrawl request",
+            "type": "main",
+            "index": 0
+          },
           {
             "node": "Tavily Search",
             "type": "main",
@@ -372,6 +421,28 @@
           }
         ]
       ]
+    },
+    "Firecrawl request": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Create Final Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -383,7 +454,7 @@
     "timezone": "America/Argentina/Buenos_Aires",
     "callerPolicy": "workflowsFromSameOwner"
   },
-  "versionId": "264f6bd5-3be5-414c-8e31-b0ea412858d5",
+  "versionId": "9882d82f-e07b-4181-be0f-c3ab5d08579d",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "4b6a6ec0188f004d18c751cbbf1895147632695b7d1d596ef7c180c854a4d10f"
