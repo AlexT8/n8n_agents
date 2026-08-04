@@ -6,7 +6,7 @@ A curated repository of production-ready, AI-powered n8n workflows.
 
 ## 🎥 Workflow Demo
 
-![Workflow Demo](assets/Job_Scrapper.gif)
+![Workflow Demo](assets/Job_Scrapper-video.gif)
 
 *Above: Live execution demonstration of an automated n8n workflow.
 
@@ -23,8 +23,7 @@ A curated repository of production-ready, AI-powered n8n workflows.
 ```
 .
 ├── assets/
-│   ├── Job_Scrapper.gif          # Animated demo preview
-│   └── Job_Scrapper.mp4          # Demo video recording
+│   ├── Job_Scrapper.gif          # Animated demorecording
 ├── <workflow-folder>/
 │   ├── <workflow-or-agent>.json  # n8n workflow export ready to import
 │   └── README.md                 # Setup guide & instructions
